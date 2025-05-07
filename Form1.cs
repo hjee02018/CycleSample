@@ -10,8 +10,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using CycleSample.DB;
 using System.Configuration;
-using DocumentFormat.OpenXml.Office2010.CustomUI;
-using DocumentFormat.OpenXml.Drawing.Charts;
+//using DocumentFormat.OpenXml.Office2010.CustomUI;
+//using DocumentFormat.OpenXml.Drawing.Charts;
 using System.Web;
 using Oracle.ManagedDataAccess.Client;
 
@@ -23,6 +23,8 @@ namespace CycleSample
         private DBOracleSql sqlQuery = new DBOracleSql();
         // 🔹 ContextMenuStrip을 생성
         private ContextMenuStrip contextMenu = new ContextMenuStrip();
+        // 🔹 CycleDatatable 별도 생성
+        System.Data.DataTable dtFiltered = new DataTable(); 
 
         public Form1()
         {
@@ -56,16 +58,20 @@ namespace CycleSample
             cmbStatus.Items.Add("Transfer");
             cmbStatus.Items.Add("Lift");
             cmbStatus.SelectedIndex= 0;
+            cmbStatus.SelectedIndex= 0;
 
             //
             cmbStatt.Items.Add("All");
             cmbStatt.Items.Add("CarrierDetect-1");
             cmbStatt.Items.Add("CarrierDetect-0");
+            cmbStatt.Items.Add("ShuttleActive");
+            cmbStatt.Items.Add("ShuttleIdle");
             cmbStatt.SelectedIndex= 0;
 
             //
-            cmbRunType.Items.Add("ROLL (Transfer)");
-            cmbRunType.Items.Add("FOIL (Transfer)");
+            cmbRunType.Items.Add("FOIL/ROLL Transfer ");
+            cmbRunType.Items.Add("FOIL Conveyor");
+            cmbRunType.Items.Add("VD Lifter");
             cmbRunType.Items.Add("POWDER (RTV)");
             cmbRunType.SelectedIndex = 0;
 
@@ -75,16 +81,23 @@ namespace CycleSample
             cmbAction.Items.Add("OUT");
             cmbAction.SelectedIndex = 0;
 
+
+            //
+            cmbInOutType.Items.Add("IN");
+            cmbInOutType.Items.Add("OUT");
+
             // DB 접속 정보 기본 세팅
             txtDBIP.Text = ConfigurationManager.AppSettings["OracleMainIP"];
             txtDBPORT.Text = ConfigurationManager.AppSettings["OraclePort"];
             txtDBSID.Text = ConfigurationManager.AppSettings["OracleSID"];
             txtUSERID.Text = ConfigurationManager.AppSettings["OracleConnectionID"];
             txtUSERPW.Text = ConfigurationManager.AppSettings["OracleConnectionPassword"];
+
+            // 
+            dtFromDate.Value = DateTime.Now.AddDays(-2);
+            dtToDate.Value = DateTime.Now;
         }
-
        
-
         /// <summary>
         /// 그리드 & 뷰 초기화
         /// </summary>
@@ -108,8 +121,8 @@ namespace CycleSample
             // 날짜 (8자리)와 시간 (6자리)을 별도로 가져오기
             dicParams["FROM_DATE"]  = dtFromDate.Value.ToString("yyyyMMdd");
             dicParams["TO_DATE"]    = dtToDate.Value.ToString("yyyyMMdd");
-            dicParams["FROM_TIME"]  = dtFromDate.Value.ToString("HHmmss");
-            dicParams["TO_TIME"]    = dtToDate.Value.ToString("HHmmss");
+            dicParams["FROM_TIME"]  = dtFromTime.Value.ToString("HHmmss");
+            dicParams["TO_TIME"]    = dtToTime.Value.ToString("HHmmss");
 
             // PLC NO
             dicParams["TRACK_ID"]   = cmbPLCNO.Text.ToString().Trim();
@@ -125,6 +138,9 @@ namespace CycleSample
             // ACTION 
             if (cmbAction.SelectedIndex != 0)
                 dicParams["ACTION"] = cmbAction.Text.ToString().Trim();
+
+            if(cmbRunType.SelectedIndex==1)
+                dicParams["INOUT"] = cmbInOutType.Text.ToString().Trim();
 
             return dicParams;
         }
@@ -211,6 +227,9 @@ namespace CycleSample
             cmbSYSID.SelectedIndex = 0; // 기본 선택값 설정
         }
 
+        /// <summary>
+        /// EQUIP LOG 조회 함수
+        /// </summary>
         private void SearchViewEquipLog()
         {
             // 데이터 초기화
@@ -218,46 +237,45 @@ namespace CycleSample
 
             dtViewEquipLog.DataSource = null; // 기존 바인딩 해제
             dtViewEquipLog.Rows.Clear();      // 모든 행 제거
-            
+
             // 검색 조건 파라미터 조회
+
+            if (cmbRunType.SelectedIndex == 1 && cmbInOutType.SelectedIndex == -1)
+            {
+                MessageBox.Show("IN/OUT 유형 지정값을 선택하시오.", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
             var dicParams = GetSearchParameters();
             string sql = sqlQuery.SELECT_T_EQUIP_LOG(dicParams);
             
             System.Data.DataTable DT = GlobalClass.dbOracle.SelectSQL(sql);
 
-            for (int nGridLoop = 0; nGridLoop < DT.Rows.Count; nGridLoop++)
-            {
-                dtViewEquipLog.Rows.Add(
-                    DT.Rows[nGridLoop]["ID_T_EQUIP_LOG"].ToString().Trim(),
-                    DT.Rows[nGridLoop]["SITE"].ToString().Trim(),
-                    DT.Rows[nGridLoop]["SYS_ID"].ToString().Trim(),
-                    DT.Rows[nGridLoop]["TRACK_ID"].ToString().Trim(),
-                    DT.Rows[nGridLoop]["STATUS"].ToString().Trim(),
-                    DT.Rows[nGridLoop]["CYCLE_COUNT"].ToString().Trim(),
-                    DT.Rows[nGridLoop]["RMK"].ToString().Trim(),
-                    DT.Rows[nGridLoop]["REG_DTM"].ToString().Trim()
-                );
-            }
-
-
             if (DT.Rows.Count > 0)
             {
-                dtViewEquipLog.RowCount = DT.Rows.Count;
-
                 for (int nGridLoop = 0; nGridLoop < DT.Rows.Count; nGridLoop++)
                 {
-                    dtViewEquipLog.Rows[nGridLoop].Cells[0].Value = DT.Rows[nGridLoop]["ID_T_EQUIP_LOG"].ToString().Trim();                    // 
-                    dtViewEquipLog.Rows[nGridLoop].Cells[1].Value = DT.Rows[nGridLoop]["SITE"].ToString().Trim();                    // 
-                    dtViewEquipLog.Rows[nGridLoop].Cells[2].Value = DT.Rows[nGridLoop]["SYS_ID"].ToString().Trim();               // *
-                    dtViewEquipLog.Rows[nGridLoop].Cells[3].Value = DT.Rows[nGridLoop]["TRACK_ID"].ToString().Trim();                       // *
-                    dtViewEquipLog.Rows[nGridLoop].Cells[4].Value = DT.Rows[nGridLoop]["STATUS"].ToString().Trim(); // *
-                    dtViewEquipLog.Rows[nGridLoop].Cells[5].Value = DT.Rows[nGridLoop]["CYCLE_COUNT"].ToString().Trim();                          // *
-                    dtViewEquipLog.Rows[nGridLoop].Cells[6].Value = DT.Rows[nGridLoop]["RMK"].ToString().Trim();                           // 
-                    dtViewEquipLog.Rows[nGridLoop].Cells[7].Value = DT.Rows[nGridLoop]["REG_DTM"].ToString().Trim();                           // 
-                }
+                    object idColumn = DT.Rows[nGridLoop]["ID_T_EQUIP_LOG"];
+                    string idToUpdate = "";
+                    if (idColumn is byte[] byteArray) // RAW(32) 타입 -> 16진수 문자열 변환
+                        idToUpdate = BitConverter.ToString(byteArray).Replace("-", "");
 
+                    dtViewEquipLog.Rows.Add(
+                        idToUpdate,
+                        //DT.Rows[nGridLoop]["ID_T_EQUIP_LOG"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["SITE"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["SYS_ID"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["TRACK_ID"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["STATUS"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["RMK"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["CYCLE_COUNT"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["ACTION"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["CYCLE_TIME"].ToString().Trim(),
+                        DT.Rows[nGridLoop]["REG_DTM"].ToString().Trim()
+                    );
+                }
+                lbTotal.Text = "/ "+DT.Rows.Count.ToString().Trim()+" 건";
             }
-            else 
+            else
             {
                 dtViewEquipLog.Rows.Clear();
                 MessageBox.Show("조회된 EQUIP LOG 데이터가 없습니다.", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -279,37 +297,7 @@ namespace CycleSample
             }
             try
             {
-                // 데이터 초기화
-                InitializeData();
-
-                // 검색 조건 파라미터 조회
-                var dicParams = GetSearchParameters();
-
-                string sql = sqlQuery.SELECT_T_EQUIP_LOG(dicParams);
-                System.Data.DataTable DT = GlobalClass.dbOracle.SelectSQL(sql);
-                if (DT.Rows.Count > 0)
-                {
-                    dtViewEquipLog.RowCount = DT.Rows.Count;
-                  
-                    for (int nGridLoop = 0; nGridLoop < DT.Rows.Count; nGridLoop++)
-                    {
-                        dtViewEquipLog.Rows[nGridLoop].Cells[0].Value = DT.Rows[nGridLoop]["ID_T_EQUIP_LOG"].ToString().Trim();                    
-                        dtViewEquipLog.Rows[nGridLoop].Cells[1].Value = DT.Rows[nGridLoop]["SITE"].ToString().Trim();                    
-                        dtViewEquipLog.Rows[nGridLoop].Cells[2].Value = DT.Rows[nGridLoop]["SYS_ID"].ToString().Trim();               
-                        dtViewEquipLog.Rows[nGridLoop].Cells[3].Value = DT.Rows[nGridLoop]["TRACK_ID"].ToString().Trim();             
-                        dtViewEquipLog.Rows[nGridLoop].Cells[4].Value = DT.Rows[nGridLoop]["STATUS"].ToString().Trim(); 
-                        dtViewEquipLog.Rows[nGridLoop].Cells[5].Value = DT.Rows[nGridLoop]["CYCLE_COUNT"].ToString().Trim();
-                        dtViewEquipLog.Rows[nGridLoop].Cells[6].Value = DT.Rows[nGridLoop]["RMK"].ToString().Trim();        
-                        dtViewEquipLog.Rows[nGridLoop].Cells[7].Value = DT.Rows[nGridLoop]["REG_DTM"].ToString().Trim();      
-                        dtViewEquipLog.Rows[nGridLoop].Cells[8].Value = DT.Rows[nGridLoop]["CYCLE_TIME"].ToString().Trim();
-                        dtViewEquipLog.Rows[nGridLoop].Cells[9].Value = DT.Rows[nGridLoop]["ACTION"].ToString().Trim();
-                    }
-                }
-                else // 조회 데이터가 없는 경우 
-                {
-                    dtViewEquipLog.Rows.Clear();
-                    MessageBox.Show("조회된 EQUIP LOG 데이터가 없습니다.", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
+                SearchViewEquipLog();
             }
             catch (Exception ex)
             {
@@ -444,56 +432,55 @@ namespace CycleSample
                 string sql = sqlQuery.SELECT_T_EQUIP_LOG(dicParams);
                 System.Data.DataTable DT = GlobalClass.dbOracle.SelectSQL(sql);
 
+                MessageBox.Show(sql, "!! 사이클 분석", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
                 if (DT.Rows.Count > 0)
                 {
                     dtViewEquipLog.DataSource = DT;
                     dtViewEquipLog.ClearSelection();
 
-                    // ---- 사이클 카운트 로직 (Type1 :  FOIL*ROLL 이재기 / Type2 : LIFTER) ----
+                    // ---- 사이클 카운트 로직 (Type1 :  FOIL*ROLL 이재기/ Type2 : FOIL 컨베이어) ----
                     int cycleCount = 0;
                     int lastCycleValue = 0;
                     int i = 0;
 
-                    //if (cmbSYSID.Text.ToString().Trim().StartsWith("E0JC") ||
-                    //    cmbSYSID.Text.ToString().Trim().StartsWith("E0FC"))
-
-                    // 1) FOIL/ROLL
-                    if (cmbRunType.SelectedIndex==0 || cmbRunType.SelectedIndex==1)
+                    // 1) FOIL/ROLL TRANSFER 이재기
+                    if (cmbRunType.SelectedIndex == 0)
                     {
+                        if (dtFiltered == null || dtFiltered.Columns.Count == 0) dtFiltered = DT.Clone();
+
                         while (i <= DT.Rows.Count - 6)
                         {
-                            // 6개 연속된 행을 추출
-                            string track1   = DT.Rows[i]["TRACK_ID"].ToString().Trim();
-                            string status1  = DT.Rows[i]["STATUS"].ToString().Trim();
-                            string rmk1     = DT.Rows[i]["RMK"].ToString().Trim();
+                            string track1 = DT.Rows[i]["TRACK_ID"].ToString().Trim();
+                            string status1 = DT.Rows[i]["STATUS"].ToString().Trim();
+                            string rmk1 = DT.Rows[i]["RMK"].ToString().Trim();
 
-                            string track2   = DT.Rows[i + 1]["TRACK_ID"].ToString().Trim();
-                            string status2  = DT.Rows[i + 1]["STATUS"].ToString().Trim();
-                            string rmk2     = DT.Rows[i + 1]["RMK"].ToString().Trim();
+                            string track2 = DT.Rows[i + 1]["TRACK_ID"].ToString().Trim();
+                            string status2 = DT.Rows[i + 1]["STATUS"].ToString().Trim();
+                            string rmk2 = DT.Rows[i + 1]["RMK"].ToString().Trim();
 
-                            string track3   = DT.Rows[i + 2]["TRACK_ID"].ToString().Trim();
-                            string status3  = DT.Rows[i + 2]["STATUS"].ToString().Trim();
-                            string rmk3     = DT.Rows[i + 2]["RMK"].ToString().Trim();
+                            string track3 = DT.Rows[i + 2]["TRACK_ID"].ToString().Trim();
+                            string status3 = DT.Rows[i + 2]["STATUS"].ToString().Trim();
+                            string rmk3 = DT.Rows[i + 2]["RMK"].ToString().Trim();
 
-                            string track4   = DT.Rows[i + 3]["TRACK_ID"].ToString().Trim();
-                            string status4  = DT.Rows[i + 3]["STATUS"].ToString().Trim();
-                            string rmk4     = DT.Rows[i + 3]["RMK"].ToString().Trim();
+                            string track4 = DT.Rows[i + 3]["TRACK_ID"].ToString().Trim();
+                            string status4 = DT.Rows[i + 3]["STATUS"].ToString().Trim();
+                            string rmk4 = DT.Rows[i + 3]["RMK"].ToString().Trim();
 
-                            string track5   = DT.Rows[i + 4]["TRACK_ID"].ToString().Trim();
-                            string status5  = DT.Rows[i + 4]["STATUS"].ToString().Trim();
-                            string rmk5     = DT.Rows[i + 4]["RMK"].ToString().Trim();
+                            string track5 = DT.Rows[i + 4]["TRACK_ID"].ToString().Trim();
+                            string status5 = DT.Rows[i + 4]["STATUS"].ToString().Trim();
+                            string rmk5 = DT.Rows[i + 4]["RMK"].ToString().Trim();
 
-                            string track6   = DT.Rows[i + 5]["TRACK_ID"].ToString().Trim();
-                            string status6  = DT.Rows[i + 5]["STATUS"].ToString().Trim();
-                            string rmk6     = DT.Rows[i + 5]["RMK"].ToString().Trim();
+                            string track6 = DT.Rows[i + 5]["TRACK_ID"].ToString().Trim();
+                            string status6 = DT.Rows[i + 5]["STATUS"].ToString().Trim();
+                            string rmk6 = DT.Rows[i + 5]["RMK"].ToString().Trim();
 
                             // ① ShuttleActive
                             if (status1 == "ShuttleActive" && track1.EndsWith("-102"))
                             {
                                 // ② Conveyor (Detect Changed)
-                                if (track2.EndsWith("-102") &&
-                                    status2 == "CarrierDetect-1" && status3 == "CarrierDetect-0" &&
-                                    status4 == "CarrierDetect-1" && status5 == "CarrierDetect-0" &&
+                                if (track2.EndsWith("-102") && status2 == "CarrierDetect-1" &&
+                                    status3 == "CarrierDetect-0" && status4 == "CarrierDetect-1" &&
                                     status5 == "CarrierDetect-0" && track5.EndsWith("-102"))
                                 {
                                     // ③ ShuttleIdle
@@ -501,10 +488,9 @@ namespace CycleSample
                                     {
                                         // 🔹 DB Update
                                         object idColumn = DT.Rows[i + 5]["ID_T_EQUIP_LOG"];
-                                        string idToUpdate = "";
-                                        if (idColumn is byte[] byteArray) // RAW(32) 타입이면 16진수 문자열로 변환
-                                            idToUpdate = BitConverter.ToString(byteArray).Replace("-", "");
-                                        
+                                        string idToUpdate = ""; // 업데이트 할 컬럼의 PK
+                                        if (idColumn is byte[] byteArray) idToUpdate = BitConverter.ToString(byteArray).Replace("-", "");
+
                                         // a) CYCLE_COUNT (lastCycleValue)
                                         cycleCount++;
                                         lastCycleValue = cycleCount;
@@ -522,47 +508,177 @@ namespace CycleSample
                                         cycleTime = $"{diffTime.Minutes:D2}:{diffTime.Seconds:D2}";
 
                                         string updateQuery = $"UPDATE T_EQUIP_LOG " +
-                                            $"SET CYCLE_COUNT = {lastCycleValue} " +
-                                            $", ACTION = {actionType} "+
-                                            $", CYCLE_TIME = {cycleTime} " +
-                                            $"WHERE ID_T_EQUIP_LOG = '{idToUpdate}'";
+                                                             $"SET CYCLE_COUNT = '{lastCycleValue}', " +
+                                                             $"\"ACTION\" = '{actionType}', " +  // "ACTION" 사용
+                                                             $"CYCLE_TIME = '{cycleTime}' " +
+                                                             $"WHERE ID_T_EQUIP_LOG = '{idToUpdate}'";
 
                                         int result = GlobalClass.dbOracle.ExecuteSQL(updateQuery);
+
                                         if (result > 0)
-                                            Console.WriteLine($"[DB 업데이트 성공] ID_T_EQUIP_LOG={idToUpdate}, CYCLE_COUNT={lastCycleValue}로 업데이트됨.");
+                                            Console.WriteLine($"[DB 업데이트 성공] (1) Transfer ID_T_EQUIP_LOG={idToUpdate}, CYCLE_COUNT={lastCycleValue}로 업데이트됨.");
                                         else
-                                            Console.WriteLine($"[DB 업데이트 실패] ID_T_EQUIP_LOG={idToUpdate}에 해당하는 데이터가 없음.");
+                                            Console.WriteLine($"[DB 업데이트 실패] (1) Transfer ID_T_EQUIP_LOG={idToUpdate}에 해당하는 데이터가 없음.");
+
+                                        //for (int j = 0; j < 6; j++)
+                                        //{
+                                        //    DataRow newRow = dtFiltered.NewRow();
+
+                                        //    for (int colIndex = 1; colIndex < DT.Columns.Count; colIndex++)
+                                        //    {
+                                        //        // 각 열의 값을 확인하여 Byte[]로 할당
+                                        //        //if (DT.Rows[i + j][colIndex] is byte[] byteArr)
+                                        //        //    newRow[colIndex] = byteArr.Clone();  // Byte[] 타입 열 처리
+                                        //        //else
+                                        //            newRow[colIndex] = DT.Rows[i + j][colIndex];  // 다른 타입은 그대로 복사
+                                        //    }
+                                        //    dtFiltered.Rows.Add(newRow);
+                                        //}
+
+                                        //// 🔹 사이클 조건을 만족하는 6개 행을 dtFiltered에 저장
+                                        for (int j = 0; j < 6; j++)
+                                        {
+                                            dtFiltered.Rows.Add(DT.Rows[i + j].ItemArray.Clone() is byte[]);
+                                            //MessageBox.Show(dtFiltered.Rows.Count.ToString().Trim());
+                                        }
+                                        // 다음 사이클
+                                        i += 6;
                                     }
                                     else i++;
-
-                                    // 다음 사이클 탐색
-                                    i += 6;
                                 }
                                 else i++;
                             }
-                            else
-                            {
-                                // 올바른 패턴이 아니므로 다음 행으로 이동
-                                i++;
-                            }
+                            else i++;
                         }
 
                         // 결과 출력
                         MessageBox.Show($"총 사이클 개수: {cycleCount}\n마지막 사이클의 CYCLE_COUNT: {lastCycleValue}",
                                         "사이클 분석", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        lbTotCnt.Text=cycleCount.ToString() + " 건";
+                        lbTotCnt.Text = cycleCount.ToString() + " 건";
 
                         SearchViewEquipLog();
                     }
-                    else if (cmbRunType.SelectedIndex==2) // 2) LIFTER
+                    else if (cmbRunType.SelectedIndex == 1)// 2) FOIL CONVEYOR
                     {
+                        int stepVal = 0;
+                        string actionType = "";
+                        int startIndex = 0;
+                        while (i < DT.Rows.Count)
+                        {
+                            // Step Sequence 활용
+                            string track = DT.Rows[i]["TRACK_ID"].ToString().Trim();
+                            string status = DT.Rows[i]["STATUS"].ToString().Trim();
+                            string rmk = DT.Rows[i]["RMK"].ToString().Trim();
 
+                            // ① STEP -1
+                            if (stepVal == 0)
+                            {
+                                if (track.EndsWith("-101") && status == "ConveyorActive")
+                                {
+                                    stepVal++;
+                                    actionType = "IN";
+                                    startIndex = i;
+                                }
+                                else if (track.EndsWith("-106") && status == "ConveyorActive")
+                                {
+                                    stepVal++;
+                                    actionType = "OUT";
+                                    startIndex = i;
+                                }
+
+                                i++;
+                                continue;
+                            }
+
+                            // ② STEP -2
+                            if ((track.EndsWith("-102") && status == "CarrierDetect-1" && stepVal == 1 && actionType == "IN") ||
+                                (track.EndsWith("-105") && status == "CarrierDetect-1" && stepVal == 1 && actionType == "OUT"))
+                            {
+                                stepVal++;
+                                continue;
+                            }
+
+                            // ③ STEP -3 (CYCLE_COUNT ++)
+                            if ((track.EndsWith("-103") && status == "ConveyorIdle" && stepVal == 2 && actionType == "IN")
+                                || (track.EndsWith("-104") && status == "ConveyorIdle" && stepVal == 2 && actionType == "OUT"))
+                            {
+                                cycleCount++;
+                                // 🔹 DB Update
+                                object idColumn = DT.Rows[i]["ID_T_EQUIP_LOG"];
+                                string idToUpdate = "";
+                                if (idColumn is byte[] byteArray)
+                                    idToUpdate = BitConverter.ToString(byteArray).Replace("-", "");
+
+                                // 🔹 CYCLE TIME (DIFF Check)
+                                string cycleTime = "";
+                                DateTime regDtmActive = Convert.ToDateTime(DT.Rows[startIndex]["REG_DTM"]);  // Shuttle Active
+                                DateTime regDtmIdle = Convert.ToDateTime(DT.Rows[i]["REG_DTM"]);             // Shuttle Idle
+                                TimeSpan diffTime = regDtmIdle - regDtmActive;                               // Diff Check
+                                cycleTime = $"{diffTime.Minutes:D2}:{diffTime.Seconds:D2}";
+
+                                lastCycleValue = cycleCount;
+                                string updateQuery = $"UPDATE T_EQUIP_LOG " +
+                                                     $"SET CYCLE_COUNT = '{lastCycleValue}', " +
+                                                     $"\"ACTION\" = '{actionType}', " +  // "ACTION" 사용
+                                                     $"CYCLE_TIME = '{cycleTime}' " +
+                                                     $"WHERE ID_T_EQUIP_LOG = '{idToUpdate}'";
+
+                                int result = GlobalClass.dbOracle.ExecuteSQL(updateQuery);
+
+                                stepVal = 0;
+
+                                if (result > 0)
+                                    Console.WriteLine($"[DB 업데이트 성공] (1) Transfer ID_T_EQUIP_LOG={idToUpdate}, CYCLE_COUNT={lastCycleValue}로 업데이트됨.");
+                                else
+                                    Console.WriteLine($"[DB 업데이트 실패] (1) Transfer ID_T_EQUIP_LOG={idToUpdate}에 해당하는 데이터가 없음.");
+                            }
+                            i++;
+                        }
+
+                        // 결과 출력
+                        MessageBox.Show($"총 사이클 개수: {cycleCount}\n마지막 사이클의 CYCLE_COUNT: {lastCycleValue}", "사이클 분석", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        lbTotCnt.Text = cycleCount.ToString() + " 건";
+
+                        SearchViewEquipLog();
                     }
-                }
-                else
-                {
-                    dtViewEquipLog.Rows.Clear();
-                    MessageBox.Show("조회된 EQUIP LOG 데이터가 없습니다.", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    else if (cmbRunType.SelectedIndex == 2) //2) VD LIFTER
+                    {
+                        int stepVal = 0;
+                        string actionType = "";
+                        int startIndex = 0;
+
+                        while (i < DT.Rows.Count)
+                        {
+                            // Step Sequence 활용
+                            string track = DT.Rows[i]["TRACK_ID"].ToString().Trim();
+                            string status = DT.Rows[i]["STATUS"].ToString().Trim();
+                            string rmk = DT.Rows[i]["RMK"].ToString().Trim();
+
+                            // ① STEP -1
+                            if (stepVal == 0)
+                            {
+                                if (track.EndsWith("-101") && status == "ConveyorActive")
+                                {
+                                    stepVal++;
+                                    actionType = "IN";
+                                    startIndex = i;
+                                }
+                                else if (track.EndsWith("-106") && status == "ConveyorActive")
+                                {
+                                    stepVal++;
+                                    actionType = "OUT";
+                                    startIndex = i;
+                                }
+                                i++;
+                                continue;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        dtViewEquipLog.Rows.Clear();
+                        MessageBox.Show("조회된 EQUIP LOG 데이터가 없습니다.", "경고", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
                 }
             }
             catch (Exception ex)
@@ -662,18 +778,133 @@ namespace CycleSample
 
             var dicParams = GetSearchParameters();
             //dicParams["CYCLE_COUNT"] = "0";
+
             dicParams["CYCLE_COUNT"] = "";
+            dicParams["ACTION"] = "";
+            dicParams["CYCLE_TIME"] = "";
             string sql = sqlQuery.UPDATE_T_EQUIP_LOG_RESET(dicParams);
-            System.Data.DataTable DT = GlobalClass.dbOracle.SelectSQL(sql);
             
             int result = GlobalClass.dbOracle.ExecuteSQL(sql);
-            
+
             if (result > 0)
                 Console.WriteLine($"[DB 업데이트 성공] CYCLE_COUNT=0 으로 초기화됨.");
             else
                 Console.WriteLine($"[DB 업데이트 실패]");
-         
+
+            MessageBox.Show(sql, "RESET", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
             SearchViewEquipLog();
+        }
+
+        private void cmbPLCNO_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // RUN TYPE(TEST TYPE) Change 필요
+        }
+
+
+        /// <summary>
+        /// CSV 추출 함수
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void btnExtract_Click(object sender, EventArgs e)
+        {
+
+            // ① SAVE RAW DATA
+            string fileName = "CycleRawResult_";
+            try
+            {
+                Microsoft.Office.Interop.Excel.Application excelApp = new Microsoft.Office.Interop.Excel.Application();
+                if (excelApp == null)
+                {
+                    SaveFileDialog saveFileDialog = Util.GetCsvSave(fileName);
+                    if (saveFileDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                    {
+                        Util.Save_csv(saveFileDialog.FileName, dtViewEquipLog, true); 
+                    }
+                }
+                else
+                {
+                    Util.ConfirmExcel(ref dtViewEquipLog, fileName);
+                }
+            }
+            catch (Exception ex)
+            {
+                //MessageBox.Show(ex.ToString(), "TYPE1", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                SaveFileDialog saveFileDialog = Util.GetCsvSave(fileName);
+                if (saveFileDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    Util.Save_csv(saveFileDialog.FileName, dtViewEquipLog, true); 
+                }
+            }
+
+            // ② SAVE CYCLE DATA ONLY (-ING)
+            string fileName2 = "CycleResult_";
+            DataGridView dtgFiltered = new DataGridView(); 
+            try
+            {
+                Microsoft.Office.Interop.Excel.Application excelApp = new Microsoft.Office.Interop.Excel.Application();
+                if (excelApp == null)
+                {
+                    SaveFileDialog saveFileDialog = Util.GetCsvSave(fileName2);
+                    if (saveFileDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                    {
+                        dtgFiltered.DataSource = dtFiltered;  // 여기서 DataSource 설정
+                        Util.Save_csv(saveFileDialog.FileName, dtgFiltered, true);
+                    }
+                }
+                else
+                {
+                    Util.ConfirmExcel(ref dtgFiltered, fileName2);
+                }
+            }
+            catch (Exception ex)
+            {
+                SaveFileDialog saveFileDialog = Util.GetCsvSave(fileName2);
+                if (saveFileDialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    MessageBox.Show(dtFiltered.Rows.Count.ToString().Trim()); 
+                    dtgFiltered.DataSource = dtFiltered;  
+                    dtgFiltered.Update();
+                    MessageBox.Show(dtgFiltered.Rows.Count.ToString().Trim());
+
+                    Util.Save_csv(saveFileDialog.FileName, dtgFiltered, true);
+                }
+            }
+        }
+
+        // DataGridView에서 선택된 행만을 DataTable로 변환
+        private DataTable GetSelectedRows(DataGridView dgv)
+        {
+            DataTable dt = ((DataTable)dgv.DataSource).Clone(); // 원본 테이블의 구조를 복사
+            foreach (DataGridViewRow row in dgv.SelectedRows)
+            {
+                if (!row.IsNewRow)
+                {
+                    DataRow dr = dt.NewRow();
+                    for (int i = 0; i < dgv.Columns.Count; i++)
+                    {
+                        dr[i] = row.Cells[i].Value;
+                    }
+                    dt.Rows.Add(dr);
+                }
+            }
+            return dt;
+        }
+
+        private void cmbRunType_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (cmbRunType.SelectedIndex == 1)
+            {
+                lbINOUTType.Visible = true;
+                cmbInOutType.Visible = true;
+            }
+            else
+            {
+                lbINOUTType.Visible = false;
+                cmbInOutType.Visible = false;
+            }
         }
     }
 }

@@ -402,38 +402,41 @@ namespace CycleSample.DB
             try
             {
                 sb.AppendFormat("   UPDATE T_EQUIP_LOG ");
-                sb.AppendFormat("   SET CYCLE_COUNT = '{0}'                  ", param["CYCLE_COUNT"]);
+                sb.AppendFormat("   SET CYCLE_COUNT = '{0}'                     ", param["CYCLE_COUNT"]);
+                sb.AppendFormat("   , \"ACTION\" = '{0}' "                       , param["ACTION"]);  
+                sb.AppendFormat("   , CYCLE_TIME = '{0}'                        ", param["CYCLE_TIME"]);
                 sb.AppendFormat("   WHERE 1=1    ");
+                sb.AppendFormat("   AND CYCLE_COUNT <> '0' ");
 
-                if (param.ContainsKey("SYS_ID"))
-                {
-                    if (param.TryGetValue("SYS_ID", out string sis_id))
-                        sb.AppendFormat("   AND SYS_ID = '{0}'             \r\n", sis_id);
-                }
+                //if (param.ContainsKey("SYS_ID"))
+                //{
+                //    if (param.TryGetValue("SYS_ID", out string sis_id))
+                //        sb.AppendFormat("   AND SYS_ID = '{0}'             \r\n", sis_id);
+                //}
 
-                if (param.ContainsKey("SITE"))
-                {
-                    if (param.TryGetValue("SITE", out string site))
-                        sb.AppendFormat("   AND SITE = '{0}'             \r\n", site);
-                }
-                
-                if (param.ContainsKey("TRACK_ID"))
-                {
-                    if (param.TryGetValue("TRACK_ID", out string track_id))
-                        sb.AppendFormat("   AND TRACK_ID LIKE '%{0}%'             \r\n", track_id);
-                }
+                //if (param.ContainsKey("SITE"))
+                //{
+                //    if (param.TryGetValue("SITE", out string site))
+                //        sb.AppendFormat("   AND SITE = '{0}'             \r\n", site);
+                //}
 
-                if(param.ContainsKey("RMK"))
-                {
-                    if (param.TryGetValue("RMK", out string rmk))
-                        sb.AppendFormat("   AND RMK LIKE '%{0}%'             \r\n", rmk);
-                }
+                //if (param.ContainsKey("TRACK_ID"))
+                //{
+                //    if (param.TryGetValue("TRACK_ID", out string track_id))
+                //        sb.AppendFormat("   AND TRACK_ID LIKE '%{0}%'             \r\n", track_id);
+                //}
 
-                if(param.ContainsKey("ACTION"))
-                {
-                    if (param.TryGetValue("ACTION", out string action))
-                        sb.AppendFormat("   AND ACTION = '{0}'             \r\n", action);
-                }
+                //if(param.ContainsKey("RMK"))
+                //{
+                //    if (param.TryGetValue("RMK", out string rmk))
+                //        sb.AppendFormat("   AND RMK LIKE '%{0}%'             \r\n", rmk);
+                //}
+
+                //if(param.ContainsKey("ACTION"))
+                //{
+                //    if (param.TryGetValue("ACTION", out string action))
+                //        sb.AppendFormat("   AND ACTION = '{0}'             \r\n", action);
+                //}
 
                 return sb.ToString();
             }
@@ -461,15 +464,6 @@ namespace CycleSample.DB
                 sb.AppendFormat("SELECT * ");
                 sb.AppendFormat("  FROM T_EQUIP_LOG");
                 sb.AppendFormat("  WHERE 1=1    ");
-
-                //if (param.ContainsKey("FROM_DATE") & param.ContainsKey("TO_DATE") && param.ContainsKey("FROM_TIME") && param.ContainsKey("TO_TIME"))
-                //{
-                //    string fromDate = param["FROM_DATE"] + param["FROM_TIME"];
-                //    string toDate = param["TO_DATE"] + param["TO_TIME"];
-                //    sb.AppendFormat("WHERE TO_TIMESTAMP(TEST_DATE || TEST_TIME , 'YYYYMMDDHH24MISS') " +
-                //                    "BETWEEN TO_TIMESTAMP('{0}', 'YYYYMMDDHH24MISS') " +
-                //                    "AND TO_TIMESTAMP('{1}', 'YYYYMMDDHH24MISS') \r\n", fromDate, toDate);
-                //}
 
                 if (param.ContainsKey("SYS_ID"))
                 {
@@ -499,6 +493,39 @@ namespace CycleSample.DB
                 {
                     if (param.TryGetValue("STATUS", out string status))
                         sb.AppendFormat("   AND STATUS = '{0}'             \r\n", status);
+                }
+
+                if (param.ContainsKey("INOUT"))
+                {
+                    if (param.TryGetValue("INOUT", out string inout))
+                    {
+                        if (inout == "IN")
+                        {
+                            sb.AppendLine("   AND (");
+                            sb.AppendLine("        TRACK_ID LIKE '%-101'");
+                            sb.AppendLine("     OR TRACK_ID LIKE '%-102'");
+                            sb.AppendLine("     OR TRACK_ID LIKE '%-103'");
+                            sb.AppendLine("       )");
+                        }
+                        else if (inout == "OUT")
+                        {
+                            sb.AppendLine("   AND (");
+                            sb.AppendLine("        TRACK_ID LIKE '%-104'");
+                            sb.AppendLine("     OR TRACK_ID LIKE '%-105'");
+                            sb.AppendLine("     OR TRACK_ID LIKE '%-106'");
+                            sb.AppendLine("       )");
+                        }
+                    }
+                }
+
+
+                if (param.ContainsKey("FROM_DATE") & param.ContainsKey("TO_DATE") && param.ContainsKey("FROM_TIME") && param.ContainsKey("TO_TIME"))
+                {
+                    string fromDate = param["FROM_DATE"] + param["FROM_TIME"];
+                    string toDate = param["TO_DATE"] + param["TO_TIME"];
+                    sb.AppendFormat("AND REG_DTM " +
+                                    "BETWEEN TO_TIMESTAMP('{0}', 'YYYYMMDDHH24MISS') " +
+                                    "AND TO_TIMESTAMP('{1}', 'YYYYMMDDHH24MISS') \r\n", fromDate, toDate);
                 }
 
                 sb.AppendFormat(" ORDER BY REG_DTM ASC");
